@@ -17,8 +17,14 @@ export class CookieJar {
     }
   }
 
-  /** Header `Cookie` listo para mandar en el próximo request. */
-  header(): string {
+  /**
+   * Header `Cookie` listo para mandar, o `undefined` si todavía no hay
+   * cookies. El WAF del sitio bloquea la request si mandamos `Cookie: ""`
+   * vacío en el primer request (lo confirmamos en pruebas reales) — mejor
+   * no mandar el header en absoluto en ese caso.
+   */
+  header(): string | undefined {
+    if (this.cookies.size === 0) return undefined;
     return [...this.cookies.entries()].map(([k, v]) => `${k}=${v}`).join("; ");
   }
 }

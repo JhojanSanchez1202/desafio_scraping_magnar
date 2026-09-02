@@ -52,6 +52,12 @@ export class PjeClient {
     this.jar.update(res.headers["set-cookie"] as unknown as string[] | undefined);
   }
 
+  /** Sólo incluye el header Cookie cuando ya hay algo que mandar. */
+  private cookieHeaders(): Record<string, string> {
+    const cookie = this.jar.header();
+    return cookie ? { Cookie: cookie } : {};
+  }
+
   /**
    * Además de la app JSF, el sitio tiene un WAF de borde que devuelve HTTP 200
    * con una página "Requisição - Rejeitada" cuando detecta tráfico automatizado
@@ -71,7 +77,7 @@ export class PjeClient {
 
   async get(path: string): Promise<AxiosResponse<string>> {
     const res = await this.axios.get<string>(path, {
-      headers: { Cookie: this.jar.header() },
+      headers: this.cookieHeaders(),
     });
     this.captureCookies(res);
     this.assertNotWafBlocked(res.data, path);
@@ -82,7 +88,7 @@ export class PjeClient {
   async getBinary(path: string): Promise<AxiosResponse<ArrayBuffer>> {
     const res = await this.axios.get<ArrayBuffer>(path, {
       responseType: "arraybuffer",
-      headers: { Cookie: this.jar.header() },
+      headers: this.cookieHeaders(),
     });
     this.captureCookies(res);
     const contentType = String(res.headers["content-type"] ?? "");
@@ -117,7 +123,7 @@ export class PjeClient {
 
     const res = await this.axios.post<string>(actionPath, params.toString(), {
       headers: {
-        Cookie: this.jar.header(),
+        ...this.cookieHeaders(),
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest",
         "Faces-Request": "partial/ajax",

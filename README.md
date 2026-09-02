@@ -96,10 +96,13 @@ misma sesión (`document.ts`).
   intenta resolver captcha, solo fallaría con un error claro en ese caso.
 - **WAF de borde**: además del 429 de la app (documentos), el sitio tiene un
   WAF que devuelve HTTP 200 con una página "Requisição - Rejeitada" cuando
-  detecta tráfico automatizado muy seguido (lo vimos en pruebas reales
-  durante el desarrollo). `client.ts` lo detecta y lo trata como un 429
-  (mismo camino de backoff/registro de fallidos) — bajar `REQUEST_DELAY_MS`
-  agresivamente aumenta el riesgo de pegar contra este bloqueo.
+  detecta tráfico sospechoso. Una causa concreta que encontramos y ya está
+  arreglada: mandar el header `Cookie: ""` vacío en el primer request (antes
+  de tener cookies de sesión) lo gatilla inmediatamente — `cookieJar.ts`
+  ahora omite el header por completo hasta tener algo real que mandar.
+  `client.ts` igual sigue detectando esta página de bloqueo (por si se
+  gatilla por otro motivo, ej. frecuencia) y la trata como un 429 (mismo
+  camino de backoff/registro de fallidos).
 - **Parámetros exactos del AJAX de búsqueda**: `search.ts` arma el POST
   serializando todos los campos del formulario real + los overrides de fecha,
   que es el mismo mecanismo que usa el sitio para paginación y documentos.
