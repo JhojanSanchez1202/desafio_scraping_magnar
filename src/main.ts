@@ -65,25 +65,18 @@ async function main(): Promise<void> {
       const detalhe = await fetchDetalheProcesso(client, resultado);
 
       const documentosBaixados: DocumentoBaixado[] = [];
-      const movsAlvo = pendingByProceso?.get(resultado.numeroProcesso);
+      const docsAlvo = pendingByProceso?.get(resultado.numeroProcesso);
 
-      for (const mov of detalhe.movimentacoes) {
-        if (!mov.temDocumento) continue;
-        if (movsAlvo && !movsAlvo.has(mov.descricao)) continue;
+      for (const doc of detalhe.documentos) {
+        if (docsAlvo && !docsAlvo.has(doc.descricao)) continue;
 
         try {
           await sleep(requestDelayMs);
-          const { buffer, filename } = await downloadDocumento(
-            client,
-            detalhe.html,
-            mov,
-            resultado.numeroProcesso,
-            retryConfig
-          );
+          const { buffer, filename } = await downloadDocumento(client, doc, resultado.numeroProcesso, retryConfig);
           const relPath = await savePdf(resultado.numeroProcesso, filename, buffer);
           documentosBaixados.push({
-            movimentacao: mov.descricao,
-            data: mov.data,
+            descricao: doc.descricao,
+            data: doc.data,
             arquivo: relPath,
             tamanhoBytes: buffer.length,
           });
@@ -91,7 +84,7 @@ async function main(): Promise<void> {
         } catch (err) {
           const falha: DocumentoFalhado = {
             numeroProcesso: resultado.numeroProcesso,
-            movimentacao: mov.descricao,
+            documento: doc.descricao,
             motivo: (err as Error).message,
             tentativas: retryConfig.maxRetries,
             timestamp: new Date().toISOString(),
@@ -129,7 +122,7 @@ function groupByProceso(failed: DocumentoFalhado[]): Map<string, Set<string>> {
   const map = new Map<string, Set<string>>();
   for (const f of failed) {
     if (!map.has(f.numeroProcesso)) map.set(f.numeroProcesso, new Set());
-    map.get(f.numeroProcesso)!.add(f.movimentacao);
+    map.get(f.numeroProcesso)!.add(f.documento);
   }
   return map;
 }

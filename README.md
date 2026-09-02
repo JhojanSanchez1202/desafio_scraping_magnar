@@ -3,8 +3,8 @@
 Scraper en TypeScript (sin automatización de navegador — solo `axios` +
 `cheerio`) para `https://pjett.trf5.jus.br/pjeconsulta/ConsultaPublica/listView.seam`.
 Busca procesos por rango de fecha de autuação, entra a cada uno, descarga los
-PDFs de sus movimentações y maneja el rate limiting (HTTP 429) con reintentos
-y backoff exponencial.
+PDFs de sus documentos y maneja el rate limiting (HTTP 429) con reintentos y
+backoff exponencial.
 
 ## Instalación
 
@@ -33,10 +33,10 @@ npm test                   # self-check del backoff (src/utils/retry.test.ts)
 | `BASE_DELAY_MS`    | `2000`            | Delay base del backoff exponencial              |
 | `MAX_DELAY_MS`     | `30000`           | Techo del backoff                               |
 
-Ejemplo:
+Ejemplo (recomendado para probar: rango chico, delay alto):
 
 ```bash
-DATA_INICIO=01/01/2024 DATA_FIM=31/01/2024 REQUEST_DELAY_MS=2000 npm start
+DATA_INICIO=01/01/2024 DATA_FIM=15/01/2024 REQUEST_DELAY_MS=3000 npm start
 ```
 
 ## Salida
@@ -47,11 +47,11 @@ output/
 ├── failed.json   # documentos que agotaron reintentos (para --retry-failed)
 └── pdfs/
     └── <numeroProcesso>/
-        └── <fecha>_<descrição-movimentação>.pdf
+        └── <fecha>_<descrição-documento>.pdf
 ```
 
 No hace falta bajar todo en una corrida: si se corta, `npm run retry-failed`
-vuelve a buscar los mismos procesos y reintenta solo las movimentações que
+vuelve a buscar los mismos procesos y reintenta solo los documentos que
 quedaron en `failed.json` (los tokens del sitio son de un solo uso, así que
 el reintento re-navega el proceso en vez de reusar un link viejo).
 
@@ -65,58 +65,71 @@ src/
 │   └── client.ts       # sesión + serialización de forms + detección de bloqueo
 ├── scraper/
 │   ├── search.ts       # búsqueda por rango de fecha + paginación de resultados
-│   ├── detail.ts        # detalle del proceso + movimentações
-│   ├── document.ts      # genera el `cid` de descarga y baja el PDF (con 429/backoff)
+│   ├── detail.ts        # detalle del proceso: movimentações + lista de documentos
+│   ├── document.ts      # vista HTML del documento → POST "Gerar PDF" (con 429/backoff)
 │   └── types.ts
 ├── storage/output.ts    # data.json / failed.json / pdfs a disco
 ├── utils/{retry,logger}.ts
 └── main.ts               # orquestador
 ```
 
-## Cómo funciona el sitio (y por qué el scraper está armado así)
+## Cómo funciona el sitio (confirmado contra el sitio real)
 
-Es una aplicación JSF/RichFaces 3.3.3 clásica: no hay una API REST — cada
-acción (buscar, paginar, abrir un documento) es un POST `A4J.AJAX.Submit(...)`
-al mismo `listView.seam`, con cookies de sesión y `javax.faces.ViewState`.
-En vez de hardcodear cada pantalla, `ajaxAction.ts` parsea ese literal JS
-desde el `onclick`/`<script>` real de cada botón/fila del HTML devuelto por
-el servidor y lo repite como POST (`client.submitAjaxAction`) — así búsqueda,
-paginación (datascroller) y apertura de documento comparten la misma lógica.
+Es una aplicación JSF/RichFaces 3.3.3 clásica, sin API REST. Casi todo pasa
+por POST `A4J.AJAX.Submit(...)` al mismo `listView.seam`, con cookies de
+sesión. En vez de hardcodear cada pantalla, `ajaxAction.ts` parsea ese literal
+JS desde el `onclick`/`<script>` real del HTML devuelto por el servidor y lo
+repite como POST (`client.submitAjaxAction`) — así búsqueda y paginación
+(datascroller) comparten la misma lógica.
 
-Flujo de descarga de un PDF: la movimentação dispara un AJAX que genera un
-token `cid`; el PDF se descarga con `GET download.seam?cid=<cid>` usando la
-misma sesión (`document.ts`).
+Flujo completo, de punta a punta:
+
+1. **Búsqueda** (`search.ts`): POST al form `fPP` con el rango de fecha de
+   autuação. El componente real que dispara la búsqueda es
+   `fPP:j_id244` (el botón visible "Pesquisar" en realidad manda ese
+   componente, no su propio id) con `AJAXREQUEST=_viewRoot`. Cada fila de
+   `fPP:processosTable` trae un link con `openPopUp(...DetalheProcessoConsultaPublica/listView.seam?ca=<token>)`.
+2. **Detalle del proceso** (`detail.ts`): GET a
+   `/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam?ca=<token>`
+   (el token es de un solo uso). Trae dos tablas separadas:
+   - `processoEvento` — "Movimentações do Processo", solo informativo.
+   - `processoDocumentoGridTab` — "Documentos juntados ao processo", cada fila
+     con un link directo `documentoSemLoginHTML.seam?ca=...&idProcessoDoc=...`.
+     (Es más simple de lo que parecía al principio: **no** hace falta ningún
+     AJAX para "abrir" un documento, es un GET directo.)
+3. **Descarga del PDF** (`document.ts`): el GET anterior devuelve una vista
+   HTML del documento (texto completo de la decisión/pieza procesal) con un
+   botón "Gerar PDF". Ese botón hace un **POST de formulario normal** (no
+   AJAX — `f.submit()` nativo vía `jsfcljs`) al mismo formulario, con un `ca`
+   e `idProcDocBin` que se regeneran en cada render de esa vista (distintos
+   de los usados para llegar a ella). `client.postForm` replica ese POST.
 
 ## Limitaciones conocidas / próximos pasos
 
+- **Último paso sin cerrar: el POST de "Gerar PDF"**. Confirmamos contra el
+  sitio real que la búsqueda, la paginación, el detalle del proceso y la
+  vista HTML del documento funcionan de punta a punta con datos reales (30
+  procesos, movimentações y documentos parseados correctamente). El único
+  paso que todavía no devuelve el PDF es el POST final: el servidor responde
+  200 con una página genérica *"Erro inesperado, por favor tente
+  novamente"* en vez del binario. `document.ts` ya detecta esto (chequea
+  `content-type` y tira un error descriptivo en vez de guardar basura) y cae
+  en el camino normal de reintentos/`failed.json`. Falta identificar qué
+  parámetro/header exacto le falta a ese POST — el candidato más rápido para
+  cerrarlo es capturar un clic real en "Gerar PDF" desde el navegador
+  (Network tab → Copy as cURL) y compararlo contra `client.postForm` en
+  `document.ts`.
 - **reCAPTCHA inactivo hoy**: la página carga `grecaptcha` pero la llamada
   está en una rama muerta (`if (false) { grecaptcha.execute(); }`) al momento
   de este desarrollo — no se exige token para buscar. Si el sitio la
   reactiva, la búsqueda no se puede resolver sin un navegador; el scraper no
   intenta resolver captcha, solo fallaría con un error claro en ese caso.
-- **WAF de borde**: además del 429 de la app (documentos), el sitio tiene un
-  WAF que devuelve HTTP 200 con una página "Requisição - Rejeitada" cuando
-  detecta tráfico sospechoso. Una causa concreta que encontramos y ya está
-  arreglada: mandar el header `Cookie: ""` vacío en el primer request (antes
-  de tener cookies de sesión) lo gatilla inmediatamente — `cookieJar.ts`
-  ahora omite el header por completo hasta tener algo real que mandar.
-  `client.ts` igual sigue detectando esta página de bloqueo (por si se
-  gatilla por otro motivo, ej. frecuencia) y la trata como un 429 (mismo
-  camino de backoff/registro de fallidos).
-- **Parámetros exactos del AJAX de búsqueda**: `search.ts` arma el POST
-  serializando todos los campos del formulario real + los overrides de fecha,
-  que es el mismo mecanismo que usa el sitio para paginación y documentos.
-  No llegamos a confirmar contra una respuesta real con resultados (las
-  pruebas se cortaron por el WAF antes de lograrlo) que el servidor
-  devuelva la tabla `fPP:processosTable` actualizada con exactamente estos
-  parámetros. Si al correrlo aparece el warning *"La búsqueda no devolvió
-  filas..."*, el siguiente paso es capturar la pestaña Network del navegador
-  al hacer una búsqueda real (clic en "Pesquisar") y comparar el payload
-  exacto contra los `overrides` de `searchByDateRange` en `search.ts` —
-  la arquitectura (form-serialize + parseo genérico de AJAX) no cambia,
-  sólo ajustaría esa lista de parámetros.
-- Los selectores de `detail.ts` (id de la tabla de movimentações) son un
-  best-effort ya que no llegamos a capturar una página de detalle real por
-  el mismo motivo; mismo ajuste si hace falta.
+- **WAF de borde**: además del 429 de la app, el sitio tiene un WAF que
+  devuelve HTTP 200 con una página "Requisição - Rejeitada" cuando detecta
+  tráfico sospechoso. Una causa concreta que encontramos y ya está
+  arreglada: mandar el header `Cookie: ""` vacío en el primer request lo
+  gatilla inmediatamente — `cookieJar.ts` ahora omite el header hasta tener
+  algo real que mandar. `client.ts` igual sigue detectando esta página (por
+  si se gatilla por otro motivo, ej. frecuencia) y la trata como un 429.
 - Procesos en segredo de justiça no aparecen en los resultados (restricción
   del propio sitio, no del scraper).

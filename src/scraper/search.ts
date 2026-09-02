@@ -40,9 +40,11 @@ function parseResultsPage(html: string): ResultadoBusca[] {
       .replace(/\s+/g, " ")
       .trim();
 
-    // "0001234-56.2024.4.05.0000 - Ação Ordinária" (formato aproximado, a confirmar con datos reales)
-    const [numeroProcesso, ...resto] = processoText.split(" - ");
-    const classeJudicial = resto.join(" - ").trim();
+    // La celda trae todo junto: "APELAÇÃO CÍVEL ApCiv 0000288-95.2018.8.25.0049 - Assunto Partes..."
+    // (confirmado con una fila real). El número sigue siempre el formato CNJ.
+    const cnjMatch = processoText.match(/\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}/);
+    const numeroProcesso = cnjMatch?.[0];
+    const classeJudicial = numeroProcesso ? processoText.split(numeroProcesso)[0].trim() : processoText;
 
     const rowHtml = $tr.html() || "";
     const caMatch = rowHtml.match(/[?&]ca=([0-9a-fA-F]+)/);
@@ -91,9 +93,12 @@ export async function searchByDateRange(
     "fPP:dataAutuacaoDecoration:dataAutuacaoInicioInputCurrentDate": toMonthYear(dataInicio),
     "fPP:dataAutuacaoDecoration:dataAutuacaoFimInputDate": dataFim,
     "fPP:dataAutuacaoDecoration:dataAutuacaoFimInputCurrentDate": toMonthYear(dataFim),
-    "fPP:searchProcessos": "fPP:searchProcessos",
-    AJAXREQUEST: "fPP",
-    ajaxSingle: "fPP:searchProcessos",
+    // El botón "Pesquisar" llama executarPesquisa(), que en realidad manda
+    // el submit ligado al componente fPP:j_id244 (no fPP:searchProcessos) —
+    // confirmado con una captura real del navegador (Network tab).
+    "fPP:j_id244": "fPP:j_id244",
+    AJAXREQUEST: "_viewRoot",
+    "AJAX:EVENTS_COUNT": "1",
   };
 
   const res = await client.postAjax(actionPath, home.data, "fPP", overrides);

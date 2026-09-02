@@ -135,6 +135,41 @@ export class PjeClient {
     return res;
   }
 
+  /**
+   * POST de formulario normal (no-AJAX) — el botón "Gerar PDF" hace un
+   * `f.submit()` nativo, no un A4J.AJAX.Submit. La respuesta puede ser
+   * binaria (el PDF) o HTML, por eso se pide como arraybuffer.
+   */
+  async postForm(
+    actionPath: string,
+    sourceHtml: string,
+    formId: string,
+    overrides: Record<string, string>
+  ): Promise<AxiosResponse<ArrayBuffer>> {
+    const params = serializeForm(sourceHtml, formId);
+    for (const [k, v] of Object.entries(overrides)) params.set(k, v);
+
+    const res = await this.axios.post<ArrayBuffer>(actionPath, params.toString(), {
+      responseType: "arraybuffer",
+      headers: {
+        ...this.cookieHeaders(),
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        Referer: `${BASE_URL}${actionPath}`,
+      },
+    });
+    this.captureCookies(res);
+    const contentType = String(res.headers["content-type"] ?? "");
+    if (res.status === 429) {
+      const err = new Error(`429 Too Many Requests: ${actionPath}`) as Error & { status?: number };
+      err.status = 429;
+      throw err;
+    }
+    if (contentType.includes("text/html")) {
+      this.assertNotWafBlocked(Buffer.from(res.data).toString("utf-8"), actionPath);
+    }
+    return res;
+  }
+
   /** Repite una `AjaxAction` extraída de un onclick real (ver ajaxAction.ts). */
   async submitAjaxAction(action: AjaxAction, sourceHtml: string): Promise<AxiosResponse<string>> {
     const path = toRelativePath(action.actionUrl, BASE_URL);

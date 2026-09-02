@@ -9,17 +9,24 @@ export interface ResultadoBusca {
   tokenDetalhe: string;
 }
 
+/** Fila de "Movimentações do Processo" — informativo, sin documento asociado. */
 export interface Movimentacao {
   data: string;
   descricao: string;
-  /** true si esta movimentação tiene documento asociado para descargar. */
-  temDocumento: boolean;
-  /** ids/params necesarios para replicar el AJAX que genera el `cid` de descarga. */
-  ajaxParams?: Record<string, string>;
+}
+
+/** Fila de "Documentos juntados ao processo" — sí tiene descarga. */
+export interface DocumentoRef {
+  data: string;
+  descricao: string;
+  /** Token de un solo uso para ver el documento (?ca=). */
+  ca: string;
+  /** Id del documento dentro del proceso (?idProcessoDoc=). */
+  idProcessoDoc: string;
 }
 
 export interface DocumentoBaixado {
-  movimentacao: string;
+  descricao: string;
   data: string;
   arquivo: string;
   tamanhoBytes: number;
@@ -27,7 +34,7 @@ export interface DocumentoBaixado {
 
 export interface DocumentoFalhado {
   numeroProcesso: string;
-  movimentacao: string;
+  documento: string;
   motivo: string;
   tentativas: number;
   timestamp: string;
