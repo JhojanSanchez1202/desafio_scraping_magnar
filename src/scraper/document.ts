@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import { PjeClient } from "../http/client";
+import { toRelativePath } from "../http/ajaxAction";
 import { withBackoff } from "../utils/retry";
 import { logger } from "../utils/logger";
 import { DocumentoRef } from "./types";
@@ -40,9 +41,16 @@ export async function downloadDocumento(
   const pdfOnclick = pdfLink.attr("onclick") || "";
   const ca = pdfOnclick.match(/'ca'\s*:\s*'([^']+)'/)?.[1];
   const idProcDocBin = pdfOnclick.match(/'idProcDocBin'\s*:\s*'([^']+)'/)?.[1];
-  const formId = pdfLink.closest("form").attr("id");
+  const form = pdfLink.closest("form");
+  const formId = form.attr("id");
+  // El POST real va a la action del <form>, SIN el query string (?ca=&idProcessoDoc=)
+  // de la vista — confirmado con una captura real: mandarlo con query string
+  // duplica "ca" (una vez en la URL, otra en el body) y el servidor responde
+  // un error genérico.
+  const rawAction = form.attr("action");
+  const actionPath = rawAction ? toRelativePath(rawAction, "") : undefined;
 
-  if (!ca || !idProcDocBin || !formId) {
+  if (!ca || !idProcDocBin || !formId || !actionPath) {
     throw new Error(
       `No se encontró el link "Gerar PDF" para el documento "${documento.descricao}" del proceso ${numeroProcesso}. ` +
         "El sitio pudo haber cambiado la estructura de la vista de documento."
@@ -51,11 +59,17 @@ export async function downloadDocumento(
 
   const downloadRes = await withBackoff(
     () =>
-      client.postForm(viewPath, viewRes.data, formId, {
-        [`${formId}:downloadPDF`]: `${formId}:downloadPDF`,
-        ca,
-        idProcDocBin,
-      }),
+      client.postForm(
+        actionPath,
+        viewRes.data,
+        formId,
+        {
+          [`${formId}:downloadPDF`]: `${formId}:downloadPDF`,
+          ca,
+          idProcDocBin,
+        },
+        viewPath
+      ),
     {
       maxRetries: retryConfig.maxRetries,
       baseDelayMs: retryConfig.baseDelayMs,

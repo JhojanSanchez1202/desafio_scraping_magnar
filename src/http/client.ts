@@ -144,7 +144,8 @@ export class PjeClient {
     actionPath: string,
     sourceHtml: string,
     formId: string,
-    overrides: Record<string, string>
+    overrides: Record<string, string>,
+    refererPath: string = actionPath
   ): Promise<AxiosResponse<ArrayBuffer>> {
     const params = serializeForm(sourceHtml, formId);
     for (const [k, v] of Object.entries(overrides)) params.set(k, v);
@@ -153,8 +154,9 @@ export class PjeClient {
       responseType: "arraybuffer",
       headers: {
         ...this.cookieHeaders(),
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        Referer: `${BASE_URL}${actionPath}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+        Origin: BASE_URL.replace(/\/pjeconsulta$/, ""),
+        Referer: `${BASE_URL}${refererPath}`,
       },
     });
     this.captureCookies(res);

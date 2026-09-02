@@ -100,25 +100,18 @@ Flujo completo, de punta a punta:
 3. **Descarga del PDF** (`document.ts`): el GET anterior devuelve una vista
    HTML del documento (texto completo de la decisión/pieza procesal) con un
    botón "Gerar PDF". Ese botón hace un **POST de formulario normal** (no
-   AJAX — `f.submit()` nativo vía `jsfcljs`) al mismo formulario, con un `ca`
-   e `idProcDocBin` que se regeneran en cada render de esa vista (distintos
-   de los usados para llegar a ella). `client.postForm` replica ese POST.
+   AJAX — `f.submit()` nativo vía `jsfcljs`) a la **action del form sin query
+   string** (`ca`/`idProcessoDoc` no van en la URL del POST, solo en el body
+   como `ca`/`idProcDocBin`, con valores que se regeneran en cada render de
+   la vista). `client.postForm` replica ese POST y devuelve el PDF
+   (`Content-Type: application/pdf`, verificado con datos reales — magic
+   bytes `%PDF-`).
 
-## Limitaciones conocidas / próximos pasos
+Flujo confirmado de punta a punta contra el sitio real: búsqueda (30
+procesos), detalle, movimentações, documentos y descarga de PDF real.
 
-- **Último paso sin cerrar: el POST de "Gerar PDF"**. Confirmamos contra el
-  sitio real que la búsqueda, la paginación, el detalle del proceso y la
-  vista HTML del documento funcionan de punta a punta con datos reales (30
-  procesos, movimentações y documentos parseados correctamente). El único
-  paso que todavía no devuelve el PDF es el POST final: el servidor responde
-  200 con una página genérica *"Erro inesperado, por favor tente
-  novamente"* en vez del binario. `document.ts` ya detecta esto (chequea
-  `content-type` y tira un error descriptivo en vez de guardar basura) y cae
-  en el camino normal de reintentos/`failed.json`. Falta identificar qué
-  parámetro/header exacto le falta a ese POST — el candidato más rápido para
-  cerrarlo es capturar un clic real en "Gerar PDF" desde el navegador
-  (Network tab → Copy as cURL) y compararlo contra `client.postForm` en
-  `document.ts`.
+## Limitaciones conocidas
+
 - **reCAPTCHA inactivo hoy**: la página carga `grecaptcha` pero la llamada
   está en una rama muerta (`if (false) { grecaptcha.execute(); }`) al momento
   de este desarrollo — no se exige token para buscar. Si el sitio la
