@@ -12,6 +12,11 @@ export interface BackoffOptions {
   onRetry?: (attempt: number, delayMs: number, err: unknown) => void;
 }
 
+/** Predicado reutilizable: sólo reintenta errores tageados con status 429 (ver client.ts). */
+export function isHttp429(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { status?: number }).status === 429;
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function withBackoff<T>(fn: () => Promise<T>, opts: BackoffOptions): Promise<T> {

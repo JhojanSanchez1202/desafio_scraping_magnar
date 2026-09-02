@@ -1,7 +1,7 @@
 import * as cheerio from "cheerio";
 import { PjeClient } from "../http/client";
 import { toRelativePath } from "../http/ajaxAction";
-import { withBackoff } from "../utils/retry";
+import { withBackoff, isHttp429 } from "../utils/retry";
 import { logger } from "../utils/logger";
 import { DocumentoRef } from "./types";
 
@@ -13,10 +13,6 @@ export interface RetryConfig {
 
 function sanitizeFilename(s: string): string {
   return s.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_").slice(0, 150);
-}
-
-function isHttp429(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { status?: number }).status === 429;
 }
 
 /**

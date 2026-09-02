@@ -110,8 +110,41 @@ Flujo completo, de punta a punta:
 Flujo confirmado de punta a punta contra el sitio real: búsqueda (30
 procesos), detalle, movimentações, documentos y descarga de PDF real.
 
+Además, la búsqueda pública parece tener un tope duro de **30 resultados**:
+probamos con un rango de un año completo (2024) y siguió devolviendo
+exactamente 30, sin ningún control de paginación en el HTML — no es un límite
+del scraper, es lo que el sitio devuelve.
+
+## Manejo de errores 429 / robustez
+
+- 429 se detecta en **todos** los métodos HTTP del cliente (`get`, `getBinary`,
+  `postAjax`, `postForm`), no sólo en la descarga de PDFs — cualquier request
+  (búsqueda, detalle, documento) puede reintentarse con el mismo backoff
+  exponencial + jitter (`utils/retry.ts`).
+- Backoff aplicado en: búsqueda inicial, apertura de detalle de cada proceso,
+  y descarga de cada PDF. Si un documento agota los reintentos, se registra en
+  `output/failed.json` con el motivo y se sigue con el siguiente (no aborta la
+  corrida).
+- Timeout de 30s por request (axios) — si el servidor cuelga la respuesta en
+  vez de rechazarla, el scraper no se queda esperando para siempre.
+- Errores inesperados por proceso (ej. HTML con estructura distinta a la
+  esperada) se loggean y el scraper sigue con el siguiente proceso, no aborta
+  toda la corrida.
+
 ## Limitaciones conocidas
 
+- **Paginación de movimentações dentro de un proceso**: RichFaces pagina esa
+  tabla con un `rich:inputNumberSlider` (un slider numérico de "página", no
+  botones next/prev). Confirmamos contra un proceso real con 4 páginas
+  (54 movimentações) que el POST se reconoce como AJAX pero el servidor
+  responde sin aplicar el cambio de página — no identificamos qué parámetro
+  adicional necesita el protocolo interno del slider sin una captura real de
+  un cambio de página en el navegador (mismo método que resolvió la búsqueda
+  y la descarga de PDF). `detail.ts` devuelve la primera página igual
+  (sin duplicar ni perder datos silenciosamente) y loggea una advertencia
+  explícita cuando esto pasa. La tabla de **documentos** (la que importa para
+  las descargas de PDF) usa el mismo mecanismo, pero en ningún proceso real
+  de los que probamos tuvo más de una página.
 - **reCAPTCHA inactivo hoy**: la página carga `grecaptcha` pero la llamada
   está en una rama muerta (`if (false) { grecaptcha.execute(); }`) al momento
   de este desarrollo — no se exige token para buscar. Si el sitio la

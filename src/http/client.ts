@@ -14,7 +14,9 @@ const USER_AGENT =
  */
 export function serializeForm(html: string, formId: string): URLSearchParams {
   const $ = cheerio.load(html);
-  const form = $(`form#${formId}`);
+  // Atributo, no #id: los ids de RichFaces llevan ":" (ej. "j_id146:j_id561"),
+  // que en un selector CSS #id se interpreta como pseudo-clase inválida.
+  const form = $(`form[id="${formId}"]`);
   const params = new URLSearchParams();
   form.find("input, select, textarea").each((_, el) => {
     const $el = $(el);
@@ -43,6 +45,7 @@ export class PjeClient {
   constructor() {
     this.axios = axios.create({
       baseURL: BASE_URL,
+      timeout: 30000, // si el servidor cuelga la respuesta, no nos quedamos esperando para siempre
       validateStatus: () => true, // manejamos nosotros los status (429 incluido)
       headers: { "User-Agent": USER_AGENT },
     });
@@ -75,11 +78,20 @@ export class PjeClient {
     }
   }
 
+  private assertNot429(status: number, path: string): void {
+    if (status === 429) {
+      const err = new Error(`429 Too Many Requests: ${path}`) as Error & { status?: number };
+      err.status = 429;
+      throw err;
+    }
+  }
+
   async get(path: string): Promise<AxiosResponse<string>> {
     const res = await this.axios.get<string>(path, {
       headers: this.cookieHeaders(),
     });
     this.captureCookies(res);
+    this.assertNot429(res.status, path);
     this.assertNotWafBlocked(res.data, path);
     return res;
   }
@@ -91,14 +103,10 @@ export class PjeClient {
       headers: this.cookieHeaders(),
     });
     this.captureCookies(res);
+    this.assertNot429(res.status, path);
     const contentType = String(res.headers["content-type"] ?? "");
     if (res.status === 200 && contentType.includes("text/html")) {
       this.assertNotWafBlocked(Buffer.from(res.data).toString("utf-8"), path);
-    }
-    if (res.status === 429) {
-      const err = new Error(`429 Too Many Requests: ${path}`) as Error & { status?: number };
-      err.status = 429;
-      throw err;
     }
     if (res.status < 200 || res.status >= 300) {
       const err = new Error(`HTTP ${res.status} descargando ${path}`) as Error & { status?: number };
@@ -119,6 +127,12 @@ export class PjeClient {
     overrides: Record<string, string>
   ): Promise<AxiosResponse<string>> {
     const params = serializeForm(sourceHtml, formId);
+    // Sin estos dos el servidor no reconoce el POST como AJAX y devuelve la
+    // página completa sin aplicar la acción (confirmado con la búsqueda Y con
+    // la paginación de movimentações — es un requisito de todo A4J.AJAX.Submit
+    // del sitio, no algo específico de una pantalla).
+    params.set("AJAXREQUEST", "_viewRoot");
+    params.set("AJAX:EVENTS_COUNT", "1");
     for (const [k, v] of Object.entries(overrides)) params.set(k, v);
 
     const res = await this.axios.post<string>(actionPath, params.toString(), {
@@ -131,6 +145,7 @@ export class PjeClient {
       },
     });
     this.captureCookies(res);
+    this.assertNot429(res.status, actionPath);
     this.assertNotWafBlocked(res.data, actionPath);
     return res;
   }
@@ -160,12 +175,8 @@ export class PjeClient {
       },
     });
     this.captureCookies(res);
+    this.assertNot429(res.status, actionPath);
     const contentType = String(res.headers["content-type"] ?? "");
-    if (res.status === 429) {
-      const err = new Error(`429 Too Many Requests: ${actionPath}`) as Error & { status?: number };
-      err.status = 429;
-      throw err;
-    }
     if (contentType.includes("text/html")) {
       this.assertNotWafBlocked(Buffer.from(res.data).toString("utf-8"), actionPath);
     }

@@ -8,6 +8,7 @@ import { searchByDateRange } from "./scraper/search";
 import { fetchDetalheProcesso } from "./scraper/detail";
 import { downloadDocumento, RetryConfig } from "./scraper/document";
 import { appendProcesso, appendFailed, ensureOutputDirs, loadFailed, saveFailed, savePdf } from "./storage/output";
+import { withBackoff, isHttp429 } from "./utils/retry";
 import { logger } from "./utils/logger";
 import { DocumentoBaixado, DocumentoFalhado, ProcessoExtraido } from "./scraper/types";
 
@@ -52,7 +53,11 @@ async function main(): Promise<void> {
 
   logger.info("Iniciando búsqueda", { dataInicio, dataFim, retryFailedMode });
   const client = new PjeClient();
-  const resultados = await searchByDateRange(client, dataInicio, dataFim);
+  const resultados = await withBackoff(() => searchByDateRange(client, dataInicio, dataFim), {
+    ...retryConfig,
+    isRetryable: isHttp429,
+    onRetry: (attempt, delayMs) => logger.warn("429 en la búsqueda, reintentando", { attempt, delayMs }),
+  });
   logger.info(`Búsqueda devolvió ${resultados.length} proceso(s)`);
 
   const stillFailing: DocumentoFalhado[] = [];
@@ -62,7 +67,16 @@ async function main(): Promise<void> {
 
     try {
       await sleep(requestDelayMs);
-      const detalhe = await fetchDetalheProcesso(client, resultado);
+      const detalhe = await withBackoff(() => fetchDetalheProcesso(client, resultado), {
+        ...retryConfig,
+        isRetryable: isHttp429,
+        onRetry: (attempt, delayMs) =>
+          logger.warn("429 al abrir el detalle del proceso, reintentando", {
+            numeroProcesso: resultado.numeroProcesso,
+            attempt,
+            delayMs,
+          }),
+      });
 
       const documentosBaixados: DocumentoBaixado[] = [];
       const docsAlvo = pendingByProceso?.get(resultado.numeroProcesso);

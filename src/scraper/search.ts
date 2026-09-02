@@ -64,7 +64,14 @@ function parseResultsPage(html: string): ResultadoBusca[] {
   return rows;
 }
 
-/** Busca el control "próxima página" del datascroller de resultados, si existe. */
+/**
+ * Busca el control "próxima página" del datascroller de resultados, si existe.
+ * Nota: en pruebas reales (incluso con un rango de un año completo) el sitio
+ * siempre devolvió como máximo 30 resultados y sin ningún control de
+ * paginación en el HTML — parece un tope duro de la consulta pública, no
+ * paginado. Esta función queda como fallback por si algún rango sí pagina,
+ * pero no se pudo verificar contra un caso real con más de una página.
+ */
 function findNextPageAction(html: string) {
   const $ = cheerio.load(html);
   const next = $(`[id="${RESULTS_TABLE_ID}"]`)
