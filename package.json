@@ -1,24 +1,24 @@
 {
   "name": "scraper-challenge",
   "version": "1.0.0",
-  "description": "Scraper TypeScript (sin automatizacion de navegador) para la Consulta Publica del PJe TRF5",
-  "main": "dist/main.js",
+  "description": "Scraper en TypeScript para la Consulta Pública del PJe TRF5 (Brasil)",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "ts-node src/main.ts",
-    "retry-failed": "ts-node src/main.ts --retry-failed",
     "build": "tsc",
-    "test": "ts-node src/utils/retry.test.ts"
+    "start": "node dist/index.js",
+    "dev": "ts-node src/index.ts",
+    "test": "ts-node src/scraper/PageParser.test.ts && ts-node src/downloader/PdfDownloader.test.ts && ts-node src/storage/StateManager.test.ts"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["scraper", "typescript"],
   "license": "ISC",
+  "dependencies": {
+    "axios": "^1.20.0",
+    "cheerio": "^1.2.0",
+    "dotenv": "^17.4.2"
+  },
   "devDependencies": {
     "@types/node": "^26.4.1",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
-  },
-  "dependencies": {
-    "axios": "^1.20.0",
-    "cheerio": "^1.2.0"
   }
 }

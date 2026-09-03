@@ -1,15 +1,19 @@
-/** Logger mínimo: timestamp + nivel + mensaje. No hace falta Winston/Pino para esto. */
+import fs from "fs";
+import path from "path";
+import { config } from "../config";
 
-type Level = "info" | "warn" | "error";
+fs.mkdirSync(config.paths.logsDir, { recursive: true });
+const logFile = path.join(config.paths.logsDir, `run-${Date.now()}.log`);
 
-function log(level: Level, msg: string, ctx?: Record<string, unknown>): void {
-  const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${msg}`;
-  const out = level === "error" ? console.error : console.log;
-  out(ctx ? `${line} ${JSON.stringify(ctx)}` : line);
+function write(level: string, msg: string, meta?: unknown) {
+  const line = `[${new Date().toISOString()}] [${level}] ${msg}${meta ? " " + JSON.stringify(meta) : ""}`;
+  console.log(line);
+  fs.appendFileSync(logFile, line + "\n");
 }
 
 export const logger = {
-  info: (msg: string, ctx?: Record<string, unknown>) => log("info", msg, ctx),
-  warn: (msg: string, ctx?: Record<string, unknown>) => log("warn", msg, ctx),
-  error: (msg: string, ctx?: Record<string, unknown>) => log("error", msg, ctx),
+  info: (msg: string, meta?: unknown) => write("INFO", msg, meta),
+  warn: (msg: string, meta?: unknown) => write("WARN", msg, meta),
+  error: (msg: string, meta?: unknown) => write("ERROR", msg, meta),
+  progress: (current: number, total: number, label: string) => write("INFO", `${label}: ${current}/${total}`),
 };

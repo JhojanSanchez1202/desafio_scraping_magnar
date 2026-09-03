@@ -1,5 +1,14 @@
 node_modules/
 dist/
-output/
-*.log
 .env
+
+data/*.jsonl
+data/*.json
+data/.test*/
+pdfs/**/*.pdf
+logs/*.log
+output/
+
+!data/.gitkeep
+!pdfs/.gitkeep
+!logs/.gitkeep
