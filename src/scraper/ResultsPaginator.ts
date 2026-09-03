@@ -27,12 +27,24 @@ export class ResultsPaginator {
    * exige para reconocer el POST como AJAX (`AJAXREQUEST`,
    * `AJAX:EVENTS_COUNT`) — sin ellos devuelve la página completa sin
    * aplicar la acción, confirmado contra el sitio real.
+   *
+   * `AJAXREQUEST` no siempre vale `_viewRoot`: cuando el componente trae un
+   * `containerId` propio (ej. el slider de "página" de movimentações), hay
+   * que mandar ESE valor — mandar `_viewRoot` ahí devuelve 200 con
+   * `Ajax-Update-Ids=""` (sin aplicar el cambio, sin ningún error).
+   * Confirmado con una captura real de un cambio de página.
    */
-  private async postAjax(actionPath: string, sourceHtml: string, formId: string, overrides: Record<string, string>) {
+  private async postAjax(
+    actionPath: string,
+    sourceHtml: string,
+    formId: string,
+    overrides: Record<string, string>,
+    containerId?: string
+  ) {
     const snapshot = PageParser.extractFormSnapshot(sourceHtml, formId);
     const body = new URLSearchParams({
       ...snapshot,
-      AJAXREQUEST: "_viewRoot",
+      AJAXREQUEST: containerId ?? "_viewRoot",
       "AJAX:EVENTS_COUNT": "1",
       ...overrides,
     });
@@ -92,7 +104,8 @@ export class ResultsPaginator {
         PageParser.toRelativePath(nextAction.actionUrl),
         html,
         nextAction.formId,
-        nextAction.parameters
+        nextAction.parameters,
+        nextAction.containerId
       );
       const parsed = PageParser.parseSearchResults(nextRes.data as string);
       if (parsed.length === 0) break;
@@ -122,12 +135,12 @@ export class ResultsPaginator {
   }
 
   /**
-   * LÍMITE CONOCIDO: el POST se reconoce como AJAX (respuesta válida) pero
-   * el servidor responde `Ajax-Update-Ids=""` — no aplica el cambio de
-   * página. No identificamos qué parámetro adicional necesita el protocolo
-   * interno del slider sin una captura real de un cambio de página en el
-   * navegador. Devuelve solo la primera página y loggea una advertencia
-   * explícita en vez de perder datos en silencio.
+   * Recorre todas las páginas de una tabla paginada con `rich:inputNumberSlider`
+   * (movimentações, documentos). El `containerId` del slider (ver `postAjax`)
+   * es lo que hacía falta para que el cambio de página se aplicara de verdad
+   * — confirmado con una captura real. Si por algún motivo el total no crece
+   * igual, se loggea una advertencia explícita en vez de perder datos en
+   * silencio.
    */
   private async fetchAllPages<T>(
     fullHtml: string,
@@ -141,10 +154,13 @@ export class ResultsPaginator {
 
     const totalAntes = items.length;
     for (let page = 2; page <= slider.maxPage; page++) {
-      const res = await this.postAjax(PageParser.toRelativePath(slider.action.actionUrl), fullHtml, slider.action.formId, {
-        ...slider.action.parameters,
-        [slider.fieldName]: String(page),
-      });
+      const res = await this.postAjax(
+        PageParser.toRelativePath(slider.action.actionUrl),
+        fullHtml,
+        slider.action.formId,
+        { ...slider.action.parameters, [slider.fieldName]: String(page) },
+        slider.action.containerId
+      );
       items.push(...parseItems(res.data as string));
     }
 

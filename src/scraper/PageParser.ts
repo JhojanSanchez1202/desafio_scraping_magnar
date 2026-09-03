@@ -12,6 +12,14 @@ export interface AjaxAction {
   formId: string;
   actionUrl: string;
   parameters: Record<string, string>;
+  /**
+   * Región a re-renderizar. Cuando el componente la especifica, hay que
+   * mandarla como `AJAXREQUEST` en el POST — si se manda `_viewRoot` en su
+   * lugar, el servidor responde 200 sin aplicar ningún cambio y sin ningún
+   * error (confirmado con una captura real: el slider de "página" de
+   * movimentações usa `containerId`, no el default `_viewRoot`).
+   */
+  containerId?: string;
 }
 
 export interface PageSlider {
@@ -53,6 +61,7 @@ export class PageParser {
   static extractAjaxAction(js: string): AjaxAction | null {
     const submitMatch = js.match(/A4J\.AJAX\.Submit\(\s*'([^']+)'/);
     const actionUrlMatch = js.match(/'actionUrl'\s*:\s*'([^']+)'/);
+    const containerIdMatch = js.match(/'containerId'\s*:\s*'([^']*)'/);
     const parametersBlockMatch = js.match(/'parameters'\s*:\s*\{([\s\S]*?)\}\s*(?:,\s*'status'|\)\s*;?\s*$|\}\s*\))/);
     if (!submitMatch || !actionUrlMatch) return null;
 
@@ -64,7 +73,12 @@ export class PageParser {
       parameters[PageParser.unescapeJs(m[1])] = PageParser.unescapeJs(m[2]);
     }
 
-    return { formId: submitMatch[1], actionUrl: PageParser.unescapeJs(actionUrlMatch[1]), parameters };
+    return {
+      formId: submitMatch[1],
+      actionUrl: PageParser.unescapeJs(actionUrlMatch[1]),
+      parameters,
+      containerId: containerIdMatch ? PageParser.unescapeJs(containerIdMatch[1]) : undefined,
+    };
   }
 
   /** `url` viene absoluta o `/pjeconsulta/...`; la volvemos relativa a `config.target.baseUrl`. */

@@ -160,29 +160,17 @@ Por lo que pude comprobar, parece ser un limite propio de la consulta publica y 
 
 Lo dejo documentado porque inicialmente la idea era recorrer todos los resultados paginados, pero en este caso la misma consulta no estaba entregando mas de esos 30.
 
-## Lo que no termine de resolver
+## La paginacion de movimentacoes (otro caso que costo bastante)
 
 Dentro del detalle de un proceso existe una tabla de "Movimentações do Processo".
 
-Cuando tiene muchas filas, esa tabla tambien se pagina.
+Cuando tiene muchas filas, esa tabla tambien se pagina, pero no con los tipicos botones de siguiente y anterior. RichFaces usa un `rich:inputNumberSlider`, un control donde se selecciona directamente el numero de pagina.
 
-El problema es que no utiliza los tipicos botones de siguiente y anterior. RichFaces usa un `rich:inputNumberSlider`, que basicamente es un control donde se puede seleccionar el numero de pagina.
+Reconocer el POST como AJAX ya no era el problema en si (eso quedo solucionado con los cambios de `AJAXREQUEST`/`AJAX:EVENTS_COUNT` de mas arriba), pero el servidor seguia sin aplicar el cambio de pagina: respondia con `Ajax-Update-Ids=""`, es decir, recibia el pedido pero no devolvia ningun contenido para actualizar. Probe varias combinaciones de parametros sin resultado y por un tiempo lo deje documentado como limite conocido.
 
-Reconocer el POST como AJAX ya no era el problema. Eso quedo solucionado con los cambios anteriores.
+Terminó siendo el mismo tipo de problema que ya me habia pasado con `AJAXREQUEST`: no es un valor fijo. El `A4J.AJAX.Submit` de este slider trae un campo extra, `containerId`, que identifica la region que hay que re-renderizar — y ese es justamente el valor que hay que mandar como `AJAXREQUEST`, no `_viewRoot`. Lo confirme comparando otra vez una peticion real capturada del navegador contra la mia. Con eso corregido, `PageParser.extractAjaxAction` ahora tambien lee ese `containerId` cuando el componente lo trae, y `ResultsPaginator` lo usa en vez de asumir siempre `_viewRoot`.
 
-El problema fue que, aunque el servidor recibia la peticion, respondia con:
-
-`Ajax-Update-Ids=""`
-
-Es decir, recibia el pedido pero no devolvia ningun contenido para actualizar.
-
-Probe diferentes combinaciones de parametros y no consegui que el cambio de pagina funcionara correctamente.
-
-En vez de seguir metiendo parametros a ciegas, preferi dejarlo como un limite conocido.
-
-El scraper trae correctamente la primera pagina de movimentacoes y, si detecta que hay mas paginas, deja un `WARN` en el log.
-
-La tabla de documentos utiliza un mecanismo parecido, pero en los procesos que probe no encontre ninguno con mas de una pagina de documentos, asi que esto no termino afectando la parte importante del desafio, que era descargar los PDFs.
+Probado contra un proceso real con 54 movimentacoes en 4 paginas: el scraper ahora las trae completas, sin duplicar ni perder ninguna.
 
 ## Como correrlo
 

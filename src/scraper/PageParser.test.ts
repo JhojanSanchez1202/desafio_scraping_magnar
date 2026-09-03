@@ -35,7 +35,7 @@ const detailHtml = `
   <tr><td>11/06/2026 15:02:33 - Baixa Definitiva</td><td></td></tr>
   <tr><td>19/03/2026 11:22:22 - Publicado Acórdão em 19/03/2026.</td><td></td></tr>
 </tbody></table>
-<script>new Richfaces.Slider("j_id146:j_id561:j_id562",{'minValue':'1','maxValue':'4','sliderValue':'1','width':'250px','onchange':'A4J.AJAX.Submit(\\'j_id146:j_id561\\',event,{\\'actionUrl\\':\\'/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam\\',\\'parameters\\':{\\'j_id146:j_id561:j_id563\\':\\'j_id146:j_id561:j_id563\\'}} )','showArrows':true} )</script>
+<script>new Richfaces.Slider("j_id146:j_id561:j_id562",{'minValue':'1','maxValue':'4','sliderValue':'1','width':'250px','onchange':'A4J.AJAX.Submit(\\'j_id146:j_id561\\',event,{\\'actionUrl\\':\\'/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/listView.seam\\',\\'containerId\\':\\'j_id146:j_id474\\',\\'parameters\\':{\\'j_id146:j_id561:j_id563\\':\\'j_id146:j_id561:j_id563\\'}} )','showArrows':true} )</script>
 <div id="processoDocumentoGridTabPanel">
   <a onclick="openPopUp('doc','https://pjett.trf5.jus.br/pjeconsulta/ConsultaPublica/DetalheProcessoConsultaPublica/documentoSemLoginHTML.seam?ca=cafe01&idProcessoDoc=7091586')">19/03/2026 11:22:22 - Acórdão (Acórdão)</a>
 </div>
@@ -118,6 +118,17 @@ test("extractPageSlider lee minValue/maxValue y el AjaxAction del onchange", () 
   assert.strictEqual(slider!.maxPage, 4);
   assert.strictEqual(slider!.action.formId, "j_id146:j_id561");
   assert.strictEqual(slider!.action.parameters["j_id146:j_id561:j_id563"], "j_id146:j_id561:j_id563");
+  assert.strictEqual(slider!.action.containerId, "j_id146:j_id474");
+});
+
+test("extractAjaxAction captura containerId cuando el componente lo trae, undefined si no", () => {
+  const withContainer = PageParser.extractAjaxAction(
+    `A4J.AJAX.Submit('f',event,{'actionUrl':'/x','containerId':'panel1','parameters':{}} )`
+  );
+  assert.strictEqual(withContainer!.containerId, "panel1");
+
+  const withoutContainer = PageParser.extractAjaxAction(`A4J.AJAX.Submit('f',event,{'actionUrl':'/x','parameters':{}} )`);
+  assert.strictEqual(withoutContainer!.containerId, undefined);
 });
 
 test("extractPageSlider devuelve null si no hay slider en la sección", () => {
